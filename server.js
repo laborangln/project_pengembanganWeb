@@ -1,5 +1,6 @@
-const express  = require('express');
+const express = require('express');
 const path = require('path');
+const { promisePool, testConnection } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,29 +9,50 @@ app.use(express.json());
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const DEMO_USER = {
-    username: 'admin@gmail.com',
-    password: 'password123'
-};
-
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body || {};
 
     if (!username || !password) {
         return res.status(400).json({ message: 'Username dan password diperlukan' });
     }
     
-    if (username === DEMO_USER.username && password === DEMO_USER.password) {
-        return res.status(200).json({ message: 'Login berhasil' });
-    }
+    try {
+    // Query user dari database
+    const [rows] = await promisePool.execute(
+  'SELECT * FROM users WHERE username = ? AND password = ?',
+  [username, password]
+);
 
-    return res.status(401).json({ message: 'Username atau password salah' });
+
+    if (rows.length > 0) {
+      const user = rows[0];
+      return res.status(200).json({ 
+        success: true, 
+        message: `Login berhasil! Selamat datang, ${user.username}` 
+      });
+    } else {
+      return res.status(200).json({ 
+        success: false, 
+        message: 'Login gagal. Email atau password salah.' 
+      });
+    }
+  } catch (error) {
+    console.log("ERROR ASLI:", error);  // Akan muncul di terminal node
+
+    return res.status(500).json({
+        success: false,
+        message: "SERVER ERROR: " + error.message  // Akan muncul di browser
+    });
+}
+
 });
 
-app.get('*', (req, res) => {
+app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT,async () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);
+        
+    await testConnection();
 });
